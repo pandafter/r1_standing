@@ -13,7 +13,7 @@ from . import agents
 
 
 gym.register(
-    id="Template-R1-Standing-Direct-v0",
+    id="R1Standing-Direct-v0",
     entry_point=f"{__name__}.r1_standing_env:R1StandingEnv",
     disable_env_checker=True,
     kwargs={

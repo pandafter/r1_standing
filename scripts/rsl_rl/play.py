@@ -153,11 +153,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # extract the neural network module
     # we do this in a try-except to maintain backwards compatibility.
     try:
-        # version 2.3 onwards
-        policy_nn = runner.alg.policy
+        # version 4.0 onwards uses get_policy()
+        policy_nn = runner.alg.get_policy()
     except AttributeError:
-        # version 2.2 and below
-        policy_nn = runner.alg.actor_critic
+        try:
+            # version 2.3 onwards
+            policy_nn = runner.alg.policy
+        except AttributeError:
+            # version 2.2 and below
+            policy_nn = runner.alg.actor_critic
 
     # extract the normalizer
     if hasattr(policy_nn, "actor_obs_normalizer"):
@@ -167,10 +171,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     else:
         normalizer = None
 
-    # export policy to onnx/jit
-    export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-    export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
-    export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+    # export policy to onnx/jit (only if checkpoint exists)
+    if resume_path and os.path.exists(resume_path):
+        export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
+        try:
+            export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
+            export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+        except Exception as e:
+            print(f"Could not export policy: {e}")
 
     dt = env.unwrapped.step_dt
 

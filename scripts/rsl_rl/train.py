@@ -8,7 +8,13 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+import os
 import sys
+
+# Add r1_standing source to Python path
+_SOURCE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "source")
+if _SOURCE_PATH not in sys.path:
+    sys.path.insert(0, _SOURCE_PATH)
 
 from isaaclab.app import AppLauncher
 
@@ -227,3 +233,4 @@ if __name__ == "__main__":
     main()
     # close sim app
     simulation_app.close()
+
