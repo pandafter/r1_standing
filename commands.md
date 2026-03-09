@@ -1,3 +1,19 @@
-# Training Command
+# Trainging Command
+python scripts/rsl_rl/train.py --task=Template-R1-Prueba-Direct-v0 --num_envs=4 --headless
 
-cd c:/space_r1/isaaclab && python c:/space_r1/r1_standing/scripts/rsl_rl/train.py --task R1Standing-Direct-v0 --num_envs=5000
+## Flags Variables
+
+### Test
+--num_envs=4
+--headless
+
+### Play
+--num_envs=2
+
+
+# Playing Command
+
+python scripts/rsl_rl/play.py --task=Template-R1-Prueba-Direct-v0 --num_envs=2
+
+# Rutas de acceso politicas
+

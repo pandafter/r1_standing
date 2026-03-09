@@ -15,24 +15,23 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 500
     experiment_name = "r1_standing"
 
+    # RSL-RL v4 requires separate actor/critic dicts + obs_groups
+    obs_groups = {"actor": ["policy"], "critic": ["policy"]}
+
     actor = {
         "class_name": "rsl_rl.models.MLPModel",
         "hidden_dims": [256, 128, 64],
         "activation": "elu",
         "obs_normalization": False,
         "stochastic": True,
-        "init_noise_std": 1.0
+        "init_noise_std": 1.0,
     }
-
     critic = {
         "class_name": "rsl_rl.models.MLPModel",
         "hidden_dims": [256, 128, 64],
         "activation": "elu",
         "obs_normalization": False,
-        "stochastic": False,
-        "init_noise_std": 1.0
     }
-
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         actor_obs_normalization=False,
@@ -48,7 +47,7 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         entropy_coef=0.005,
         num_learning_epochs=5,
         num_mini_batches=4,
-        learning_rate=2.5e-4,
+        learning_rate=1.0e-3,
         schedule="adaptive",
         gamma=0.99,
         lam=0.95,
