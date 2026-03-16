@@ -57,6 +57,20 @@ class R1StandingEnv(DirectRLEnv):
         self._right_leg_ids, _ = self.robot.find_joints(
             [".*right.*hip.*", ".*right.*knee.*", ".*right.*ankle.*"]
         )
+        
+        # Arm joint IDs - detectar articulaciones de brazos
+        self._left_arm_ids, _ = self.robot.find_joints(".*left.*shoulder.*")
+        self._right_arm_ids, _ = self.robot.find_joints(".*right.*shoulder.*")
+        self._left_elbow_ids, _ = self.robot.find_joints(".*left.*elbow.*")
+        self._right_elbow_ids, _ = self.robot.find_joints(".*right.*elbow.*")
+        
+        # Todos los joints de brazos (hombro + codo)
+        self._left_arm_all_ids, _ = self.robot.find_joints(
+            [".*left.*shoulder.*", ".*left.*elbow.*"]
+        )
+        self._right_arm_all_ids, _ = self.robot.find_joints(
+            [".*right.*shoulder.*", ".*right.*elbow.*"]
+        )
 
     # --------------------------------------------------------------------- #
     # Scene
@@ -182,6 +196,12 @@ class R1StandingEnv(DirectRLEnv):
         left_leg_actions = self.actions[:, self._left_leg_ids]
         right_leg_actions = self.actions[:, self._right_leg_ids]
         knee_pos_dev = joint_pos_dev[:, self._knee_joint_ids]
+        
+        # Arm tensors for new rewards
+        left_arm_pos_dev = joint_pos_dev[:, self._left_arm_all_ids]
+        right_arm_pos_dev = joint_pos_dev[:, self._right_arm_all_ids]
+        left_arm_actions = self.actions[:, self._left_arm_all_ids]
+        right_arm_actions = self.actions[:, self._right_arm_all_ids]
 
         return compute_rewards(
             # --- Reward scales (floats) ---
@@ -210,6 +230,11 @@ class R1StandingEnv(DirectRLEnv):
             self.cfg.rew_scale_knee_extension,
             self.cfg.rew_scale_return_to_default,
             self.cfg.rew_scale_bilateral_balance,
+            # --- New reward scales for torso and arms ---
+            self.cfg.rew_scale_torso_yaw,
+            self.cfg.rew_scale_left_arm_crossing,
+            self.cfg.rew_scale_arm_symmetry,
+            self.cfg.rew_scale_arm_movement,
             # --- Tensors ---
             self.robot.data.root_pos_w[:, 2],
             self.robot.data.projected_gravity_b,
@@ -230,6 +255,11 @@ class R1StandingEnv(DirectRLEnv):
             left_leg_actions,
             right_leg_actions,
             knee_pos_dev,
+            # --- Arm tensors ---
+            left_arm_pos_dev,
+            right_arm_pos_dev,
+            left_arm_actions,
+            right_arm_actions,
         )
 
     # --------------------------------------------------------------------- #
@@ -312,6 +342,11 @@ def compute_rewards(
     rew_scale_knee_extension: float,
     rew_scale_return_to_default: float,
     rew_scale_bilateral_balance: float,
+    # --- New reward scales for torso and arms ---
+    rew_scale_torso_yaw: float,
+    rew_scale_left_arm_crossing: float,
+    rew_scale_arm_symmetry: float,
+    rew_scale_arm_movement: float,
     # --- Tensors ---
     base_height: torch.Tensor,
     gravity_proj: torch.Tensor,
@@ -332,6 +367,11 @@ def compute_rewards(
     left_leg_actions: torch.Tensor,
     right_leg_actions: torch.Tensor,
     knee_pos_dev: torch.Tensor,
+    # --- New arm tensors ---
+    left_arm_pos_dev: torch.Tensor,
+    right_arm_pos_dev: torch.Tensor,
+    left_arm_actions: torch.Tensor,
+    right_arm_actions: torch.Tensor,
 ):
     # ================================================================
     # BASE REWARDS
@@ -465,6 +505,50 @@ def compute_rewards(
     rew_bilateral_balance = -rew_scale_bilateral_balance * foot_height_asymmetry
 
     # ================================================================
+    # NEW: TORSO YAW PENALTY - Penalizar rotacion del torso
+    # El robot no debe girar el torso hacia los lados
+    # ================================================================
+    
+    # Usamos la orientacion proyectada para detectar rotacion del torso
+    # gravity_proj[0] es X, gravity_proj[1] es Y en frame body
+    # Un torso rotado tendra componentes en estos ejes
+    torso_yaw_error = torch.abs(gravity_proj[:, 0]) + torch.abs(gravity_proj[:, 1])
+    rew_torso_yaw = -rew_scale_torso_yaw * torch.square(torso_yaw_error)
+
+    # ================================================================
+    # NEW: LEFT ARM CROSSING PENALTY - Penalizar brazo cruzando al otro lado
+    # El brazo izquierdo no debe pasar de la linea central
+    # ================================================================
+    
+    # Sumamos la desviacion de los joints del brazo izquierdo
+    # Si el valor es positivo significativo, el brazo esta cruzando hacia la derecha
+    left_arm_deviation = torch.sum(torch.abs(left_arm_pos_dev), dim=-1)
+    # Tambien penalizar acciones extremas del brazo izquierdo
+    left_arm_action_magnitude = torch.sum(torch.square(left_arm_actions), dim=-1)
+    rew_left_arm_crossing = -rew_scale_left_arm_crossing * (
+        torch.square(left_arm_deviation - 0.5) + left_arm_action_magnitude
+    )
+
+    # ================================================================
+    # NEW: ARM SYMMETRY - Mantener brazos simetricos
+    # Ambos brazos deben estar en posicion similar
+    # ================================================================
+    
+    left_arm_sum = torch.sum(left_arm_pos_dev, dim=-1)
+    right_arm_sum = torch.sum(right_arm_pos_dev, dim=-1)
+    arm_asymmetry = torch.square(left_arm_sum + right_arm_sum)
+    rew_arm_symmetry = -rew_scale_arm_symmetry * arm_asymmetry
+
+    # ================================================================
+    # NEW: ARM MOVEMENT PENALTY - Minimizar movimiento de brazos
+    # Los brazos deben mantenerse estables
+    # ================================================================
+    
+    left_arm_move = torch.sum(torch.square(left_arm_actions), dim=-1)
+    right_arm_move = torch.sum(torch.square(right_arm_actions), dim=-1)
+    rew_arm_movement = -rew_scale_arm_movement * (left_arm_move + right_arm_move)
+
+    # ================================================================
     # TOTAL REWARD
     # FIX: Removed rew_scale_recovery scalar leak (was adding constant +2.0)
     # ================================================================
@@ -493,6 +577,10 @@ def compute_rewards(
         + rew_knee_extension
         + rew_return_to_default
         + rew_bilateral_balance
+        + rew_torso_yaw
+        + rew_left_arm_crossing
+        + rew_arm_symmetry
+        + rew_arm_movement
     )
 
     return total_reward * 0.1

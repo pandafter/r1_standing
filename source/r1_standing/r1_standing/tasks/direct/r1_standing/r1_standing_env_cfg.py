@@ -106,3 +106,17 @@ class R1StandingEnvCfg(DirectRLEnvCfg):
     # Nuevos rewards: retorno a pose y balance bilateral
     rew_scale_return_to_default = 6.0    # Reward por retornar a pose default cuando erguido
     rew_scale_bilateral_balance = 8.0    # Penalizacion asimetria de altura de pies
+    
+    # ===== REWARDS PARA ESTABILIDAD TORSO Y BRAZOS (corregir giro hacia izquierda) =====
+    # Penalizacion fuerte por rotacion del torso (yaw) - evitar que gire hacia un lado
+    rew_scale_torso_yaw = 25.0
+    
+    # Penalizacion por brazo izquierdo cruzando hacia la derecha
+    # El brazo izquierdo no debe pasar de la linea central del cuerpo
+    rew_scale_left_arm_crossing = 20.0
+    
+    # Reward por mantener brazos en posicion neutral/simetrica
+    rew_scale_arm_symmetry = 15.0
+    
+    # Penalizacion por movimiento excesivo de brazos
+    rew_scale_arm_movement = 3.0
